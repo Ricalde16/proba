@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora Estadística</title>
+  <!-- Cargar Chart.js (versión 4.x) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <!-- Cargar el plugin de boxplot compatible con Chart.js 4 -->
+  <script src="https://cdn.jsdelivr.net/npm/@sgratzl/chartjs-chart-boxplot@4"></script>
+  <!-- Cargar jsPDF (para generar el PDF) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Registro del plugin y escalas necesarias -->
+  <script>
+    Chart.register(
+      ChartBoxPlot.BoxPlotController,
+      ChartBoxPlot.BoxAndWiskers,
+      Chart.LinearScale,
+      Chart.CategoryScale
+    );
+  </script>
+  <style>
+    /* FONDO GENERAL OSCURO, PERO NO AFECTA AL CANVAS */
+    body {
+      font-family: Arial, sans-serif;
+      background: #000;
+      color: #e0e0e0;
+      margin: 20px;
+      text-align: center;
+    }
+    .container {
+      background: linear-gradient(135deg, #000000, #003d33);
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.9);
+      max-width: 800px;
+      margin: auto;
+    }
+    input, button, select {
+      margin: 8px;
+      padding: 8px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #333;
+      color: #e0e0e0;
+    }
+    button {
+      background: #00796b;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #009688;
+    }
+    /* FONDO BLANCO PARA EL CANVAS, DE MODO QUE EL PDF LO VEA CLARO */
+    canvas {
+      background: #fff !important; /* !important para forzar blanco */
+      border: 1px solid #555;
+      border-radius: 5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 6px 10px;
+      border: 1px solid #555;
+      text-align: left;
+    }
+    th {
+      background: #00796b;
+      color: #fff;
+    }
+    .chart-container {
+      margin-top: 15px;
+    }
+    /* MODAL DE AYUDA */
+    .modal {
+      display: none; 
+      position: fixed; 
+      z-index: 100; 
+      left: 0;
+      top: 0;
+      width: 100%; 
+      height: 100%; 
+      overflow: auto; 
+      background-color: rgba(0,0,0,0.8); 
+    }
+    .modal-content {
+      background: #003d33;
+      margin: 15% auto; 
+      padding: 20px;
+      border: 1px solid #00796b;
+      width: 80%; 
+      border-radius: 10px;
+      color: #e0e0e0;
+      text-align: left;
+    }
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .close:hover,
+    .close:focus {
+      color: #fff;
+      text-decoration: none;
+    }
+    footer {
+      background: rgba(18, 18, 18, 1);
+      color: #e0e0e0;
+      text-align: center;
+      padding: 1px;
+      font-size: 10px;
+      margin-top: 10px;
+      position: relative;
+      bottom: 0;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Calculadora Estadística</h2>
+    <p>Ingresa números separados por comas o carga un archivo de texto (.txt):</p>
+    <input type="text" id="numeros" placeholder="Ejemplo: 10, 20, 30">
+    <input type="file" id="fileInput" accept=".txt">
+    
+    <!-- Tabla de opciones de cálculos y selección de gráfico -->
+    <table>
+      <tr>
+        <th colspan="2">Opciones de Estadísticas</th>
+        <th colspan="2">Selecciona el Gráfico a Mostrar</th>
+      </tr>
+      <tr>
+        <td>Media</td>
+        <td><input type="checkbox" id="showMedia" checked></td>
+        <td colspan="2">
+          <select id="graphSelect">
+            <option value="barras">Gráfico de Barras</option>
+            <option value="dispersión">Gráfico de Dispersión</option>
+            <option value="histograma">Histograma</option>
+            <option value="boxplot">Boxplot</option>
+            <option value="gauss">Campana de Gauss</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>Mediana</td>
+        <td><input type="checkbox" id="showMediana" checked></td>
+        <td colspan="2"></td>
+      </tr>
+      <tr>
+        <td>Moda</td>
+        <td><input type="checkbox" id="showModa" checked></td>
+        <td colspan="2"></td>
+      </tr>
+      <tr>
+        <td>Varianza</td>
+        <td><input type="checkbox" id="showVarianza" checked></td>
+        <td colspan="2"></td>
+      </tr>
+      <tr>
+        <td>Desv. Est.</td>
+        <td><input type="checkbox" id="showDesviacion" checked></td>
+        <td colspan="2"></td>
+      </tr>
+      <tr>
+        <td>Ecuación</td>
+        <td><input type="checkbox" id="showEcuacion" checked></td>
+        <td colspan="2"></td>
+      </tr>
+      <tr>
+        <td>Cuartil 1 (Q1)</td>
+        <td><input type="checkbox" id="showQ1" checked></td>
+        <td colspan="2"></td>
+      </tr>
+      <tr>
+        <td>Cuartil 3 (Q3)</td>
+        <td><input type="checkbox" id="showQ3" checked></td>
+        <td colspan="2"></td>
+      </tr>
+      <tr>
+        <td>Curtosis</td>
+        <td><input type="checkbox" id="showCurtosis" checked></td>
+        <td colspan="2"></td>
+      </tr>
+      <tr>
+        <td>Sesgo</td>
+        <td><input type="checkbox" id="showSesgo" checked></td>
+        <td colspan="2"></td>
+      </tr>
+    </table>
+    
+    <!-- Botones de acción -->
+    <button onclick="calcularEstadisticas()">Calcular</button>
+    <button onclick="mostrarAyuda()">Ayuda</button>
+    <button onclick="descargarReporte()">Descargar Reporte</button>
+    
+    <!-- Tabla de resultados -->
+    <table id="resultados">
+      <tr>
+        <th>Métrica</th>
+        <th>Valor</th>
+      </tr>
+      <tr id="rowMedia">
+        <td>Media</td>
+        <td id="media"></td>
+      </tr>
+      <tr id="rowMediana">
+        <td>Mediana</td>
+        <td id="mediana"></td>
+      </tr>
+      <tr id="rowModa">
+        <td>Moda</td>
+        <td id="moda"></td>
+      </tr>
+      <tr id="rowVarianza">
+        <td>Varianza</td>
+        <td id="varianza"></td>
+      </tr>
+      <tr id="rowDesviacion">
+        <td>Desv. Est.</td>
+        <td id="desviacion"></td>
+      </tr>
+      <tr id="rowEcuacion">
+        <td>Ecuación</td>
+        <td id="ecuacion"></td>
+      </tr>
+      <tr id="rowQ1">
+        <td>Cuartil 1 (Q1)</td>
+        <td id="q1"></td>
+      </tr>
+      <tr id="rowQ3">
+        <td>Cuartil 3 (Q3)</td>
+        <td id="q3"></td>
+      </tr>
+      <tr id="rowCurtosis">
+        <td>Curtosis</td>
+        <td id="curtosis"></td>
+      </tr>
+      <tr id="rowSesgo">
+        <td>Sesgo</td>
+        <td id="sesgo"></td>
+      </tr>
+    </table>
+    
+    <!-- Contenedores para gráficos -->
+    <div id="containerGrafico" class="chart-container">
+      <canvas id="grafico"></canvas>
+    </div>
+    <div id="containerPlot" class="chart-container">
+      <canvas id="plot"></canvas>
+    </div>
+    <div id="containerHistograma" class="chart-container">
+      <canvas id="histograma"></canvas>
+    </div>
+    <div id="containerBoxplot" class="chart-container">
+      <canvas id="boxplot"></canvas>
+    </div>
+    <div id="containerGauss" class="chart-container">
+      <canvas id="gauss"></canvas>
+    </div>
+  </div>
+
+  <!-- Modal de Ayuda -->
+  <div id="helpModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="cerrarAyuda()">&times;</span>
+      <h2>Ayuda - Calculadora Estadística</h2>
+      <p>
+        <strong>Entrada de Datos:</strong> Ingresa números separados por comas o carga un archivo de texto (.txt).
+      </p>
+      <p>
+        <strong>Herramientas de Cálculo:</strong>
+        <ul>
+          <li><strong>Media:</strong> Promedio de los números.</li>
+          <li><strong>Mediana:</strong> Valor central.</li>
+          <li><strong>Moda:</strong> Valores más frecuentes.</li>
+          <li><strong>Varianza y Desviación Estándar:</strong> Dispersión de los datos.</li>
+          <li><strong>Ecuación de Regresión:</strong> Línea de mejor ajuste.</li>
+          <li><strong>Cuartiles (Q1 y Q3):</strong> Dividen el conjunto en cuatro partes.</li>
+          <li><strong>Curtosis y Sesgo:</strong> Forma y asimetría de la distribución.</li>
+          <li><strong>Campana de Gauss:</strong> Curva normal basada en la media y desv. est.</li>
+        </ul>
+      </p>
+      <p>
+        Haz clic en "Calcular" para procesar los datos y en "Descargar Reporte" para guardar un PDF con los resultados y gráficos.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    let miGrafico, miPlot, miHistograma, miBoxPlot, miGauss;
+
+    // Al cargar un archivo .txt, colocar su contenido en el input
+    document.getElementById("fileInput").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById("numeros").value = e.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // Cuando cambia el select de gráficos
+    document.getElementById("graphSelect").addEventListener("change", updateGraphVisibility);
+
+    function updateGraphVisibility() {
+      const selected = document.getElementById("graphSelect").value;
+      toggleVisibility("containerGrafico", (selected === "barras"));
+      toggleVisibility("containerPlot", (selected === "dispersión"));
+      toggleVisibility("containerHistograma", (selected === "histograma"));
+      toggleVisibility("containerBoxplot", (selected === "boxplot"));
+      toggleVisibility("containerGauss", (selected === "gauss"));
+    }
+
+    function calcularEstadisticas() {
+      let input = document.getElementById("numeros").value;
+      let valores = input.split(",")
+                         .map(num => num.trim())
+                         .filter(num => num !== "" && !isNaN(parseFloat(num)))
+                         .map(num => parseFloat(num));
+
+      if (!valores.length) {
+        alert("Por favor, ingresa números válidos.");
+        return;
+      }
+
+      // Calcular estadísticas
+      let suma = valores.reduce((acc, num) => acc + num, 0);
+      let media = suma / valores.length;
+      valores.sort((a, b) => a - b);
+      let mitad = Math.floor(valores.length / 2);
+      let mediana = (valores.length % 2 === 0)
+        ? (valores[mitad - 1] + valores[mitad]) / 2
+        : valores[mitad];
+
+      let lowerHalf = valores.slice(0, mitad);
+      let upperHalf = (valores.length % 2 === 0)
+        ? valores.slice(mitad)
+        : valores.slice(mitad + 1);
+      let q1 = getMedian(lowerHalf);
+      let q3 = getMedian(upperHalf);
+
+      let frecuencia = {};
+      valores.forEach(num => {
+        frecuencia[num] = (frecuencia[num] || 0) + 1;
+      });
+      let maxFreq = Math.max(...Object.values(frecuencia));
+      let moda = Object.keys(frecuencia).filter(num => frecuencia[num] === maxFreq).join(", ");
+
+      let varianza = valores.reduce((acc, num) => acc + Math.pow(num - media, 2), 0) / valores.length;
+      let desviacion = Math.sqrt(varianza);
+
+      // Regresión lineal
+      let n = valores.length;
+      let x = valores.map((_, i) => i + 1);
+      let sumX = x.reduce((acc, v) => acc + v, 0);
+      let sumY = valores.reduce((acc, v) => acc + v, 0);
+      let sumXY = x.reduce((acc, v, i) => acc + v * valores[i], 0);
+      let sumX2 = x.reduce((acc, v) => acc + v * v, 0);
+      let divisor = n * sumX2 - sumX * sumX;
+      let m = divisor ? (n * sumXY - sumX * sumY) / divisor : 0;
+      let b = (sumY - m * sumX) / n;
+
+      let curtosis = 0;
+      if (desviacion !== 0) {
+        curtosis = (valores.reduce((acc, num) => acc + Math.pow(num - media, 4), 0) / valores.length)
+                   / Math.pow(desviacion, 4) - 3;
+      }
+      let sesgo = 0;
+      if (desviacion !== 0) {
+        sesgo = (valores.reduce((acc, num) => acc + Math.pow(num - media, 3), 0) / valores.length)
+                / Math.pow(desviacion, 3);
+      }
+
+      // Actualizar tabla
+      document.getElementById("media").textContent = media.toFixed(2);
+      document.getElementById("mediana").textContent = mediana;
+      document.getElementById("moda").textContent = moda;
+      document.getElementById("varianza").textContent = varianza.toFixed(2);
+      document.getElementById("desviacion").textContent = desviacion.toFixed(2);
+      document.getElementById("ecuacion").textContent = `y = ${m.toFixed(2)}x + ${b.toFixed(2)}`;
+      document.getElementById("q1").textContent = q1.toFixed(2);
+      document.getElementById("q3").textContent = q3.toFixed(2);
+      document.getElementById("curtosis").textContent = curtosis.toFixed(2);
+      document.getElementById("sesgo").textContent = sesgo.toFixed(2);
+
+      // Mostrar/ocultar filas
+      toggleVisibility("rowMedia", document.getElementById("showMedia").checked);
+      toggleVisibility("rowMediana", document.getElementById("showMediana").checked);
+      toggleVisibility("rowModa", document.getElementById("showModa").checked);
+      toggleVisibility("rowVarianza", document.getElementById("showVarianza").checked);
+      toggleVisibility("rowDesviacion", document.getElementById("showDesviacion").checked);
+      toggleVisibility("rowEcuacion", document.getElementById("showEcuacion").checked);
+      toggleVisibility("rowQ1", document.getElementById("showQ1").checked);
+      toggleVisibility("rowQ3", document.getElementById("showQ3").checked);
+      toggleVisibility("rowCurtosis", document.getElementById("showCurtosis").checked);
+      toggleVisibility("rowSesgo", document.getElementById("showSesgo").checked);
+
+      // Actualizar gráficos
+      actualizarGraficos(valores, m, b, media, desviacion);
+
+      // Mostrar solo el contenedor seleccionado
+      updateGraphVisibility();
+    }
+
+    // Ajustes en negro (líneas, ticks) y ancho mayor para verlos bien en PDF
+    const blackAxes = {
+      border: {
+        display: true,
+        color: "#000",
+        width: 1
+      },
+      grid: {
+        color: "#000",
+        lineWidth: 1,
+        drawBorder: true
+      },
+      ticks: {
+        color: "#000"
+      }
+    };
+
+    function actualizarGraficos(valores, m, b, media, desviacion) {
+      // 1) Gráfico de Barras
+      if (!miGrafico) {
+        miGrafico = new Chart(document.getElementById("grafico"), {
+          type: 'bar',
+          data: { labels: [], datasets: [] },
+          options: {
+            responsive: true,
+            scales: {
+              x: { ...blackAxes },
+              y: { beginAtZero: true, ...blackAxes }
+            }
+          }
+        });
+      }
+      miGrafico.data.labels = valores.map((_, i) => `Dato ${i + 1}`);
+      miGrafico.data.datasets = [{
+        label: 'Valores ingresados',
+        data: valores,
+        backgroundColor: 'rgba(40,167,69,0.7)',
+        borderColor: 'rgba(40,167,69,1)',
+        borderWidth: 1
+      }];
+      miGrafico.update();
+
+      // 2) Gráfico de Dispersión
+      if (!miPlot) {
+        miPlot = new Chart(document.getElementById("plot"), {
+          type: 'scatter',
+          data: { datasets: [] },
+          options: {
+            responsive: true,
+            scales: {
+              x: { type: 'linear', position: 'bottom', ...blackAxes },
+              y: { beginAtZero: true, ...blackAxes }
+            }
+          }
+        });
+      }
+      miPlot.data.datasets = [
+        {
+          label: 'Datos',
+          data: valores.map((num, i) => ({ x: i + 1, y: num })),
+          backgroundColor: 'rgba(255,99,132,0.7)',
+          borderColor: 'rgba(255,99,132,1)',
+          borderWidth: 1,
+          pointRadius: 5
+        },
+        {
+          label: 'Regresión',
+          data: valores.map((_, i) => ({ x: i + 1, y: m * (i + 1) + b })),
+          type: 'line',
+          borderColor: 'blue',
+          fill: false
+        }
+      ];
+      miPlot.update();
+
+      // 3) Histograma
+      if (!miHistograma) {
+        miHistograma = new Chart(document.getElementById("histograma"), {
+          type: 'bar',
+          data: { labels: [], datasets: [] },
+          options: {
+            responsive: true,
+            scales: {
+              x: { ...blackAxes },
+              y: { beginAtZero: true, ...blackAxes }
+            },
+            plugins: {
+              title: { display: true, text: 'Histograma', color: "#000" }
+            }
+          }
+        });
+      }
+      const min = Math.min(...valores);
+      const max = Math.max(...valores);
+      let numBins = (min === max) ? 1 : 5;
+      let binWidth = (max - min) / numBins;
+      let bins = new Array(numBins).fill(0);
+      let labels = [];
+      for (let i = 0; i < numBins; i++) {
+        const inicio = min + i * binWidth;
+        const fin = (i === numBins - 1) ? max : (inicio + binWidth);
+        labels.push(`${inicio.toFixed(2)} - ${fin.toFixed(2)}`);
+      }
+      valores.forEach(val => {
+        let index = (numBins === 1) ? 0 : Math.floor((val - min) / binWidth);
+        if (index >= numBins) index = numBins - 1;
+        bins[index]++;
+      });
+      miHistograma.data.labels = labels;
+      miHistograma.data.datasets = [{
+        label: 'Frecuencia',
+        data: bins,
+        backgroundColor: 'rgba(54,162,235,0.7)',
+        borderColor: 'rgba(54,162,235,1)',
+        borderWidth: 1
+      }];
+      miHistograma.update();
+
+      // 4) Boxplot
+      if (!miBoxPlot) {
+        miBoxPlot = new Chart(document.getElementById("boxplot"), {
+          type: 'boxplot',
+          data: {
+            labels: ['Datos'],
+            datasets: [{
+              label: 'Box Plot',
+              data: [],
+              backgroundColor: 'rgba(255,159,64,0.7)',
+              borderColor: 'rgba(255,159,64,1)',
+              borderWidth: 1,
+              outlierColor: '#999999',
+              padding: 10
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: { display: true, text: 'Gráfico de Caja y Bigotes', color: "#000" }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: 'Conjunto de Datos', color: "#000" },
+                ...blackAxes
+              },
+              y: {
+                title: { display: true, text: 'Valor', color: "#000" },
+                ...blackAxes
+              }
+            }
+          }
+        });
+      }
+      miBoxPlot.data.datasets[0].data = [valores];
+      miBoxPlot.update();
+
+      // 5) Campana de Gauss
+      if (!miGauss) {
+        miGauss = new Chart(document.getElementById("gauss"), {
+          type: 'line',
+          data: { labels: [], datasets: [] },
+          options: {
+            responsive: true,
+            scales: {
+              x: {
+                title: { display: true, text: 'Eje X (valores)', color: "#000" },
+                ...blackAxes
+              },
+              y: {
+                beginAtZero: true,
+                title: { display: true, text: 'Densidad', color: "#000" },
+                ...blackAxes
+              }
+            },
+            plugins: {
+              title: { display: true, text: 'Campana de Gauss', color: "#000" }
+            }
+          }
+        });
+      }
+      let gaussData = [];
+      if (desviacion > 0) {
+        let start = media - 3 * desviacion;
+        let end   = media + 3 * desviacion;
+        let steps = 60;
+        let stepSize = (end - start) / steps;
+        for (let i = 0; i <= steps; i++) {
+          let xVal = start + i * stepSize;
+          let pdf = (1 / (desviacion * Math.sqrt(2 * Math.PI))) *
+                    Math.exp(-0.5 * Math.pow((xVal - media) / desviacion, 2));
+          gaussData.push({ x: xVal, y: pdf });
+        }
+      }
+      miGauss.data.datasets = [{
+        label: 'Curva Normal',
+        data: gaussData,
+        borderColor: 'rgba(255,206,86,1)',
+        backgroundColor: 'rgba(255,206,86,0.3)',
+        fill: false
+      }];
+      miGauss.data.labels = gaussData.map(pt => pt.x.toFixed(2));
+      miGauss.update();
+    }
+
+    function toggleVisibility(id, visible) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = visible ? "" : "none";
+    }
+
+    function getMedian(arr) {
+      if (!arr.length) return 0;
+      const mid = Math.floor(arr.length / 2);
+      return arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid];
+    }
+
+    function mostrarAyuda() {
+      document.getElementById("helpModal").style.display = "block";
+    }
+    function cerrarAyuda() {
+      document.getElementById("helpModal").style.display = "none";
+    }
+
+    async function descargarReporte() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.text("Reporte Estadístico", 10, 15);
+
+      doc.setFontSize(12);
+      let yPos = 25;
+      const filas = [
+        ["Media", document.getElementById("media").textContent],
+        ["Mediana", document.getElementById("mediana").textContent],
+        ["Moda", document.getElementById("moda").textContent],
+        ["Varianza", document.getElementById("varianza").textContent],
+        ["Desv. Est.", document.getElementById("desviacion").textContent],
+        ["Ecuación", document.getElementById("ecuacion").textContent],
+        ["Cuartil 1 (Q1)", document.getElementById("q1").textContent],
+        ["Cuartil 3 (Q3)", document.getElementById("q3").textContent],
+        ["Curtosis", document.getElementById("curtosis").textContent],
+        ["Sesgo", document.getElementById("sesgo").textContent]
+      ];
+      filas.forEach(fila => {
+        doc.text(`${fila[0]}: ${fila[1]}`, 10, yPos);
+        yPos += 7;
+      });
+
+      yPos += 10;
+      doc.text("Gráficos", 10, yPos);
+      yPos += 10;
+
+      async function agregarCanvasAPDF(canvasId, titulo) {
+        const pageHeight = doc.internal.pageSize.height;
+        // Si no cabe el gráfico, saltar de página
+        if (yPos + 110 > pageHeight) {
+          doc.addPage();
+          yPos = 15;
+        }
+        doc.text(titulo, 10, yPos);
+        yPos += 5;
+
+        const canvas = document.getElementById(canvasId);
+        const imgData = canvas.toDataURL("image/png");
+        doc.addImage(imgData, 'PNG', 10, yPos, 190, 100);
+        yPos += 110;
+      }
+
+      await agregarCanvasAPDF("grafico", "Gráfico de Barras");
+      await agregarCanvasAPDF("plot", "Gráfico de Dispersión");
+      await agregarCanvasAPDF("histograma", "Histograma");
+      await agregarCanvasAPDF("boxplot", "Boxplot");
+      await agregarCanvasAPDF("gauss", "Campana de Gauss");
+
+      doc.save("reporte_estadistico.pdf");
+    }
+  </script>
+
+  <footer>
+    <p>&copy; 2025 Calculadora de probabilidad y estadística | Desarrollado por Sistemas operativos trifásicos.</p>
+  </footer>
+</body>
+</html>
